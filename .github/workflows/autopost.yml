@@ -1,0 +1,65 @@
+name: GHEBRES autopost
+
+on:
+  schedule:
+    - cron: "0 * * * *"          # every hour; config.yaml decides what is due (Cyprus time, DST handled)
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "auto | weather | pharmacy | news | all"
+        default: auto
+      dry_run:
+        description: "1 = build only, publish nothing"
+        default: "0"
+      force:
+        description: "1 = publish again even if this slot was already done"
+        default: "0"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autopost
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Publish
+        env:
+          TASK: ${{ github.event.inputs.task || 'auto' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || '' }}
+          FORCE: ${{ github.event.inputs.force || '' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          TELEGRAM_ADMIN_CHAT: ${{ secrets.TELEGRAM_ADMIN_CHAT }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m autopost.main
+
+      - name: Keep images of this run (for checking)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-${{ github.run_id }}
+          path: |
+            out/
+            debug/
+          retention-days: 5
+          if-no-files-found: ignore
