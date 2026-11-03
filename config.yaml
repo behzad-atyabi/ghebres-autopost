@@ -1,0 +1,65 @@
+# GHEBRES OFFICIAL – auto-publishing settings
+# Times are Northern Cyprus local time (Europe/Nicosia). The workflow runs every hour
+# and this file decides what is published in that hour.
+
+timezone: Europe/Nicosia
+
+schedule:
+  weather_hours: [8, 16]        # weather story
+  pharmacy_hours: [8, 16]       # duty pharmacy story
+  news_hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0]   # 0 = 24:00
+  catch_up_hours: 1             # if GitHub skips a run, a missed weather/pharmacy slot is still posted within this many hours
+
+publish:
+  instagram_story: true
+  telegram: true
+  dry_run: false                # true = build images and captions but publish nothing
+
+weather:
+  # 08:00 shows today; 16:00 shows tomorrow's forecast ("today" to show today at 16:00 too)
+  evening_mode: tomorrow
+  cities:
+    lefkosa:   [35.1856, 33.3823]
+    girne:     [35.3364, 33.3182]
+    magusa:    [35.1250, 33.9417]
+    iskele:    [35.2869, 33.8853]
+    guzelyurt: [35.1983, 32.9939]
+    karpaz:    [35.6000, 34.3800]
+
+pharmacy:
+  url: https://www.kteb.org/dp/?lang=tr
+  source_name: kteb.org
+
+news:
+  model: claude-sonnet-5-5
+  max_age_hours: 6              # only stories published in the last N hours
+  skip_if_nothing_new: true     # if no fresh story, skip that hour instead of reposting
+  # RSS feeds. Feeds that fail are skipped and reported in the run log.
+  # The site feeds below are common URL patterns; check the first runs' log and edit if one fails.
+  sources:
+    - name: Google News – KKTC
+      url: https://news.google.com/rss/search?q=KKTC+when:1d&hl=tr&gl=TR&ceid=TR:tr
+    - name: Google News – Kuzey Kıbrıs
+      url: https://news.google.com/rss/search?q=%22Kuzey+K%C4%B1br%C4%B1s%22+when:1d&hl=tr&gl=TR&ceid=TR:tr
+    - name: Yenidüzen
+      url: https://www.yeniduzen.com/rss
+    - name: Kıbrıs Postası
+      url: https://www.kibrispostasi.com/rss
+    - name: Haber Kıbrıs
+      url: https://haberkibris.com/rss.xml
+    - name: Kıbrıs Genç TV
+      url: https://www.kibrisgenctv.com/rss
+    - name: Gündem Kıbrıs
+      url: https://www.gundemkibris.com/rss
+  # What the audience cares about – used when choosing the story of the hour
+  audience: >
+    Persian-speaking residents, students and visitors of Northern Cyprus: practical news
+    (traffic, roads, ports, flights, weather alerts, health, education, universities, visas and residence
+    rules, prices, currency, utilities, events) first; then major politics and economy.
+
+telegram:
+  instagram_link: https://instagram.com/ghebres_official
+  telegram_link: https://t.me/ghebres_official
+
+instagram:
+  graph_version: v23.0

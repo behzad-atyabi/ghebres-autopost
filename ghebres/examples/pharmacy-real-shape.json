@@ -1,0 +1,14 @@
+{"name":"pharmacy_night","layout":"pharmacy","date":"2026-11-03","source":"kteb.org","items":[
+ {"city":"lefkosa","name":"Arzum Davulcu Eczanesi","address":"Şht. Mustafa Yusuf Hacı Sok. No: 3, Yenişehir, Lefkoşa","phone":"(0392) 227 14 57","hours":"08:00 - 00:00"},
+ {"city":"lefkosa","name":"Mustafa Gürman Eczanesi","address":"Kemal Şemiler Cad. No: 6/B, Kermiya, Lefkoşa","phone":"(0392) 330 08 30","hours":"08:00 - 00:00"},
+ {"city":"lefkosa","name":"Tulis Eczanesi","address":"Mimar Mehmet Vahip Cad. No: 46/A, K.Kaymaklı, Lefkoşa","phone":"(0539) 137 06 52","hours":"08:00 - 00:00"},
+ {"city":"girne","name":"İbrahim Bardak Eczanesi","address":"Sakarya Sok. Ayşan Keskinel Apt. No:5A, Girne","phone":"(0533) 851 76 08","hours":"08:00 - 00:00"},
+ {"city":"girne","name":"Turgay Paralı Eczanesi","address":"Semih Sancar Carrington 44 Apt., Girne","phone":"(0533) 837 61 26","hours":"08:00 - 00:00"},
+ {"city":"girne","name":"Örnek Eczanesi","address":"Örnek Cad. No: 1, Alsancak","phone":"(0392) 000 00 00","hours":"08:00 - 22:00"},
+ {"city":"magusa","name":"Örnek Mağusa Eczanesi","address":"Salamis Yolu No: 8, Gazimağusa","phone":"(0392) 000 00 01","hours":"08:00 - 00:00"},
+ {"city":"magusa","name":"Örnek Liman Eczanesi","address":"Liman Yolu No: 2, Gazimağusa","phone":"(0392) 000 00 02","hours":"08:00 - 20:00"},
+ {"city":"guzelyurt","name":"Örnek Güzelyurt Eczanesi","address":"Ecevit Cad. No: 4, Güzelyurt","phone":"(0392) 000 00 03","hours":"08:00 - 00:00"},
+ {"city":"lefke","name":"Örnek Lefke Eczanesi","address":"Lefke Merkez","phone":"(0392) 000 00 04","hours":"08:00 - 00:00"},
+ {"city":"iskele","name":"Örnek İskele Eczanesi","address":"Boğaz Cad. No: 23, İskele","phone":"(0392) 000 00 05","hours":"08:00 - 00:00"},
+ {"city":"karpaz","name":"Örnek Karpaz Eczanesi","address":"Yenierenköy","phone":"(0392) 000 00 06","hours":"08:00 - 00:00"},
+ {"city":"karpaz","name":"Örnek Dipkarpaz Eczanesi","address":"Dipkarpaz Merkez","phone":"(0392) 000 00 07","hours":"08:00 - 00:00"}]}

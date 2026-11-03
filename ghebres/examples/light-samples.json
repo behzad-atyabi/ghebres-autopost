@@ -1,0 +1,108 @@
+[
+ {
+  "name": "weather",
+  "layout": "weather",
+  "date": "2026-11-03",
+  "items": [
+   {
+    "city": "lefkosa",
+    "temp": 24,
+    "condition": "sunny",
+    "low": 15
+   },
+   {
+    "city": "girne",
+    "temp": 23,
+    "condition": "partly",
+    "low": 16
+   },
+   {
+    "city": "magusa",
+    "temp": 24,
+    "condition": "sunny",
+    "low": 14
+   },
+   {
+    "city": "iskele",
+    "temp": 23,
+    "condition": "partly",
+    "low": 15
+   },
+   {
+    "city": "guzelyurt",
+    "temp": 22,
+    "condition": "cloudy",
+    "low": 13
+   },
+   {
+    "city": "karpaz",
+    "temp": 22,
+    "condition": "rain",
+    "low": 14
+   }
+  ]
+ },
+ {
+  "name": "news",
+  "layout": "news3",
+  "date": "2026-11-03",
+  "icon": "ship",
+  "source": "Kıbrıs Postası",
+  "tr": {
+   "title": "Girne Limanı’nda Yeni Yat Sezonu Başladı",
+   "body": "Girne Limanı’nda yat sezonu resmen başladı. Bölgeye hareketlilik kazandırması beklenen sezon, turistler ve tekne sahipleri için heyecan yaratıyor."
+  },
+  "en": {
+   "title": "New Yacht Season Begins at Kyrenia Harbour",
+   "body": "The yacht season has officially started at Kyrenia Harbour, expected to bring more activity to the region for tourists and boat owners."
+  },
+  "fa": {
+   "title": "آغاز فصل جدید قایق‌های تفریحی در بندر گیرنه",
+   "body": "فصل قایق‌های تفریحی در بندر گیرنه رسماً آغاز شد. انتظار می‌رود این فصل رونق بیشتری برای گردشگران و صاحبان قایق‌ها به همراه داشته باشد."
+  }
+ },
+ {
+  "name": "pharmacy",
+  "layout": "pharmacy",
+  "date": "2026-11-03",
+  "source": "kteb.org",
+  "items": [
+   {
+    "city": "lefkosa",
+    "name": "Güneş Eczanesi",
+    "address": "Atatürk Cad. No: 45, Lefkoşa",
+    "phone": "+90 392 227 12 34"
+   },
+   {
+    "city": "girne",
+    "name": "Deniz Eczanesi",
+    "address": "Zeytinlik Cad. No: 12, Girne",
+    "phone": "+90 392 815 67 89"
+   },
+   {
+    "city": "magusa",
+    "name": "Tuna Eczanesi",
+    "address": "Salamis Yolu No: 8, Mağusa",
+    "phone": "+90 392 366 44 55"
+   },
+   {
+    "city": "iskele",
+    "name": "Yeniboğaziçi Eczanesi",
+    "address": "Boğaz Cad. No: 23, İskele",
+    "phone": "+90 392 444 22 11"
+   },
+   {
+    "city": "guzelyurt",
+    "name": "Kuzey Eczanesi",
+    "address": "Atatürk Cad. No: 17, Güzelyurt",
+    "phone": "+90 392 714 33 77"
+   },
+   {
+    "city": "karpaz",
+    "name": "Karpaz Eczanesi",
+    "address": "Karpaz Yolu No: 5, Rizokarpaso",
+    "phone": "+90 392 679 12 48"
+   }
+  ]
+ }
+]
