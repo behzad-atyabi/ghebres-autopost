@@ -85,10 +85,6 @@ def news(cfg, spec, meta):
         tags,
     ]
     tail = footer(cfg, meta.get("source"), meta.get("link"))
-    text = "\n\n".join(blocks) + "\n\n" + tail
-    if len(text) <= LIMIT:
-        return text
-    # shorten: keep Persian in full, titles only for TR/EN
-    blocks = [f"🇹🇷 <b>{h(tr['title'])}</b>", f"🇬🇧 <b>{h(en['title'])}</b>",
-              f"🇮🇷 <b>{h(fa['title'])}</b>\n{h(fa['body'])}", tags]
-    return fit(blocks, tail)
+    # always the full text in TR, EN, FA; if it is longer than a photo caption allows,
+    # publish.telegram_post sends it as a message right under the photo
+    return "\n\n".join(blocks) + "\n\n" + tail

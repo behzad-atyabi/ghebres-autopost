@@ -118,8 +118,13 @@ def _ask_gemini(cfg, system, user, max_tokens):
     last = None
     for m in models:  # first model that answers wins; busy or missing models are skipped
         for attempt in range(3):
-            r = http().post(GEMINI_URL.format(m), json=body, timeout=90,
-                            headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+            try:
+                r = http().post(GEMINI_URL.format(m), json=body, timeout=45,
+                                headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+            except Exception as ex:  # timeout / connection problem -> treat like "busy"
+                last = f"{m}: {type(ex).__name__}"
+                time.sleep(5)
+                continue
             if r.status_code in (429, 500, 503):  # busy / rate limited -> wait, retry, then next model
                 last = f"{m}: HTTP {r.status_code}"
                 time.sleep(8 * (attempt + 1))
@@ -209,8 +214,8 @@ def _score(c, recent):
         if words and len(words & rw) / max(len(words), 1) >= 0.6:
             return None
     score = sum(w * sum(1 for k in kws if k in t) for w, kws in BOOST.items())
-    if len(c["summary"]) > len(c["title"]) + 20:  # has a usable summary for the body text
-        score += 1
+    if len(c["summary"]) > len(c["title"]) + 40:  # has real text for the body -> strongly preferred
+        score += 4
     if "kktc" in t or "kıbrıs" in t or any(_low(p) in t for p in PLACES_TR):
         score += 1
     return score
@@ -310,7 +315,7 @@ def make_ai(cfg, now, state):
         log.info("news: nothing new")
         return None
     recent = state.get("news_recent_titles", [])[-20:]
-    listing = "\n".join(f"[{i}] ({c['source']}, {c['published']}) {c['title']} — {c['summary'][:200]}"
+    listing = "\n".join(f"[{i}] ({c['source']}, {c['published']}) {c['title']} — {c['summary'][:200] or '(headline only)'}"
                         for i, c in enumerate(cands))
     pick = _json(_ask(cfg, PICK_SYS,
                       f"Audience: {cfg['news'].get('audience', '')}\n\nRecently posted (do not repeat):\n"

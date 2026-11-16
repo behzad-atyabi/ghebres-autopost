@@ -115,6 +115,13 @@ def tg(method, **kw):
 
 def telegram_post(paths, caption):
     chat = env("TELEGRAM_CHANNEL", required=True)
+    if len(caption) > 1024 and len(paths) == 1:
+        # Telegram allows 1024 characters under a photo: post the photo, then the full text right below it
+        with open(paths[0], "rb") as f:
+            tg("sendPhoto", data={"chat_id": chat}, files={"photo": f})
+        tg("sendMessage", data={"chat_id": chat, "text": caption[:4096], "parse_mode": "HTML",
+                                "link_preview_options": json.dumps({"is_disabled": True})})
+        return
     if len(paths) == 1:
         with open(paths[0], "rb") as f:
             tg("sendPhoto", data={"chat_id": chat, "caption": caption, "parse_mode": "HTML"}, files={"photo": f})
