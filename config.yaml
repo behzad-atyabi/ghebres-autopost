@@ -7,7 +7,7 @@ timezone: Europe/Nicosia
 schedule:
   weather_hours: [8, 16]        # weather story
   pharmacy_hours: [8, 16]       # duty pharmacy story
-  news_hours: []   # news paused (no API key yet)
+  news_hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0]   # 0 = 24:00
   catch_up_hours: 1             # if GitHub skips a run, a missed weather/pharmacy slot is still posted within this many hours
 
 publish:
@@ -31,7 +31,8 @@ pharmacy:
   source_name: kteb.org
 
 news:
-  model: claude-sonnet-5-5
+  model: claude-sonnet-5-5      # used only if ANTHROPIC_API_KEY is set
+  gemini_models: [gemini-flash-latest, gemini-3-flash, gemini-2.5-flash]   # free tier; first one that exists is used
   max_age_hours: 6              # only stories published in the last N hours
   skip_if_nothing_new: true     # if no fresh story, skip that hour instead of reposting
   # RSS feeds. Feeds that fail are skipped and reported in the run log.
