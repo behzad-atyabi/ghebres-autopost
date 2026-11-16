@@ -7,7 +7,7 @@ timezone: Europe/Nicosia
 schedule:
   weather_hours: [8, 16]        # weather story
   pharmacy_hours: [8, 16]       # duty pharmacy story
-      news_hours: []   # news paused (no API key yet)
+  news_hours: []   # news paused (no API key yet)
   catch_up_hours: 1             # if GitHub skips a run, a missed weather/pharmacy slot is still posted within this many hours
 
 publish:
