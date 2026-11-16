@@ -114,10 +114,19 @@ def _ask_gemini(cfg, system, user, max_tokens):
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": {"temperature": 0.3, "maxOutputTokens": max(max_tokens, 2048),
                                  "responseMimeType": "application/json"}}
+    import time
     last = None
-    for m in models:  # first model that exists for this key wins
-        r = http().post(GEMINI_URL.format(m), json=body, timeout=90,
-                        headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+    for m in models:  # first model that answers wins; busy or missing models are skipped
+        for attempt in range(3):
+            r = http().post(GEMINI_URL.format(m), json=body, timeout=90,
+                            headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+            if r.status_code in (429, 500, 503):  # busy / rate limited -> wait, retry, then next model
+                last = f"{m}: HTTP {r.status_code}"
+                time.sleep(8 * (attempt + 1))
+                continue
+            break
+        else:
+            continue
         if r.status_code == 404:
             last = f"{m}: not found"
             continue
@@ -126,7 +135,9 @@ def _ask_gemini(cfg, system, user, max_tokens):
         parts = r.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
         text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
         if not text:
-            raise RuntimeError(f"gemini {m}: empty answer")
+            last = f"{m}: empty answer"
+            continue
+        log.info("news: written by %s", m)
         return text
     raise RuntimeError(f"gemini: no usable model ({last})")
 
@@ -215,12 +226,29 @@ def _sentences(text, limit):
 
 
 def _translate(text, target):
-    from deep_translator import GoogleTranslator
+    import time
+    from deep_translator import GoogleTranslator, MyMemoryTranslator
     src = text
     if target == "fa":
         for k, v in PLACES_TR.items():
             src = src.replace(k, v)
-    out = GoogleTranslator(source="tr", target=target).translate(src) or ""
+    out, errors = "", []
+    for attempt in range(3):  # Google often rate-limits shared GitHub servers -> wait and retry
+        try:
+            out = GoogleTranslator(source="tr", target=target).translate(src) or ""
+            if out:
+                break
+        except Exception as ex:
+            errors.append(f"google: {type(ex).__name__}")
+            time.sleep(4 * (attempt + 1))
+    if not out:
+        try:
+            codes = {"en": "en-GB", "fa": "fa-IR"}
+            out = MyMemoryTranslator(source="tr-TR", target=codes[target]).translate(src[:450]) or ""
+        except Exception as ex:
+            errors.append(f"mymemory: {type(ex).__name__}")
+    if not out:
+        raise RuntimeError("; ".join(errors) or "empty translation")
     if target == "fa":
         for k, v in FA_FIX.items():
             out = out.replace(k, v)
