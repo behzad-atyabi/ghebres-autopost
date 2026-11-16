@@ -1,4 +1,10 @@
-"""Hourly news: collect fresh stories from RSS, let Claude pick one and write it in TR / EN / FA."""
+"""Hourly news: collect fresh stories from RSS, pick one and publish it in TR / EN / FA.
+
+Writers, in order of preference:
+- ANTHROPIC_API_KEY set -> Claude picks the story and writes the three versions (paid API).
+- GEMINI_API_KEY set    -> Google Gemini (free tier) does the same job.
+- neither, or the AI call fails -> free mode: keyword-based pick + Google Translate (deep-translator).
+"""
 import calendar
 import datetime as dt
 import hashlib
@@ -91,11 +97,44 @@ def _json(text):
     return json.loads(text[a:b + 1])
 
 
-def _ask(cfg, system, user, max_tokens=1500):
+def _ask_claude(cfg, system, user, max_tokens):
     msg = _client().messages.create(
         model=cfg["news"].get("model", "claude-sonnet-5-5"), max_tokens=max_tokens,
         system=system, messages=[{"role": "user", "content": user}])
     return "".join(getattr(b, "text", "") for b in msg.content)
+
+
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
+
+
+def _ask_gemini(cfg, system, user, max_tokens):
+    key = env("GEMINI_API_KEY", required=True)
+    models = cfg["news"].get("gemini_models") or ["gemini-flash-latest", "gemini-2.5-flash"]
+    body = {"systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": max(max_tokens, 2048),
+                                 "responseMimeType": "application/json"}}
+    last = None
+    for m in models:  # first model that exists for this key wins
+        r = http().post(GEMINI_URL.format(m), json=body, timeout=90,
+                        headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+        if r.status_code == 404:
+            last = f"{m}: not found"
+            continue
+        if r.status_code != 200:
+            raise RuntimeError(f"gemini {m} HTTP {r.status_code}: {r.text[:300]}")
+        parts = r.json().get("candidates", [{}])[0].get("content", {}).get("parts", [])
+        text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+        if not text:
+            raise RuntimeError(f"gemini {m}: empty answer")
+        return text
+    raise RuntimeError(f"gemini: no usable model ({last})")
+
+
+def _ask(cfg, system, user, max_tokens=1500):
+    if env("ANTHROPIC_API_KEY"):
+        return _ask_claude(cfg, system, user, max_tokens)
+    return _ask_gemini(cfg, system, user, max_tokens)
 
 
 PICK_SYS = """You are the news editor of GHEBRES OFFICIAL, a Persian-language news page about Northern Cyprus (KKTC).
@@ -119,7 +158,124 @@ Reply with JSON only:
 {"tr":{"title":"","body":""},"en":{"title":"","body":""},"fa":{"title":"","body":""},"icon":"news","hashtags_fa":["",""]}"""
 
 
+# ------------------------------------------------------------------ free mode (no API key, no cost)
+# Practical topics for the audience get a higher score; unsuitable topics are never picked.
+BOOST = {
+    3: ["ulaşım", "trafik", "yol ", "yolu", "kapalı", "liman", "havaliman", "ercan", "uçuş", "feribot", "otobüs",
+        "elektrik", "kesinti", "su kesintisi", "akaryakıt", "benzin", "fiyat", "zam", "asgari ücret", "döviz",
+        "sterlin", "euro", "dolar", "ikamet", "vize", "çalışma izni", "öğrenci", "üniversite", "okul", "sınav",
+        "sağlık", "hastane", "eczane", "aşı", "hava durumu", "fırtına", "yağış", "sel", "uyarı", "deprem",
+        "yangın", "tatil", "bayram", "festival", "etkinlik", "konser"],
+    1: ["bakan", "başbakan", "cumhurbaşkanı", "meclis", "hükümet", "ekonomi", "turizm", "belediye", "yatırım",
+        "inşaat", "konut", "emlak", "ihracat", "bütçe"],
+}
+BLOCK = ["burç", "magazin", "cinayet", "intihar", "taciz", "tecavüz", "istismar", "ceset", "öldürül", "bıçak",
+         "silahlı", "uyuşturucu", "köşe yazısı", "yazarımız", "reklam", "sponsor", "iddaa", "bahis", "maç sonucu"]
+ICON_WORDS = {"ship": ["liman", "feribot", "gemi", "yat "], "plane": ["havaliman", "ercan", "uçuş", "uçak"],
+              "car": ["trafik", "yol ", "yolu", "kaza", "araç", "otobüs", "akaryakıt", "benzin"],
+              "health": ["sağlık", "hastane", "eczane", "aşı", "doktor"],
+              "money": ["fiyat", "zam", "ücret", "döviz", "sterlin", "euro", "dolar", "ekonomi", "bütçe", "vergi"],
+              "alert": ["uyarı", "fırtına", "sel", "yangın", "deprem", "kesinti"],
+              "building": ["inşaat", "konut", "emlak", "belediye", "üniversite", "okul", "proje"]}
+# Turkish place names -> forms that translate well; then Persian fixes
+PLACES_TR = {"Gazimağusa": "Famagusta", "Mağusa": "Famagusta", "Lefkoşa": "Nicosia", "Girne": "Kyrenia",
+             "Güzelyurt": "Güzelyurt", "Lefke": "Lefke", "Karpaz": "Karpas"}
+FA_FIX = {"کیرنیا": "گیرنه", "کرینیا": "گیرنه", "نیکوزیا": "نیکوزیا", "فاماگوستا": "فاماگوستا",
+          "قبرس شمالی ترکیه": "قبرس شمالی", "جمهوری ترک قبرس شمالی": "قبرس شمالی"}
+
+
+def _low(s):
+    return (s or "").replace("İ", "i").replace("I", "ı").lower()
+
+
+def _score(c, recent):
+    t = _low(c["title"] + " " + c["summary"])
+    if any(b in t for b in BLOCK):
+        return None
+    words = set(_low(c["title"]).split())
+    for r in recent:  # same event already posted -> skip
+        rw = set(_low(r).split())
+        if words and len(words & rw) / max(len(words), 1) >= 0.6:
+            return None
+    score = sum(w * sum(1 for k in kws if k in t) for w, kws in BOOST.items())
+    if len(c["summary"]) > len(c["title"]) + 20:  # has a usable summary for the body text
+        score += 1
+    if "kktc" in t or "kıbrıs" in t or any(_low(p) in t for p in PLACES_TR):
+        score += 1
+    return score
+
+
+def _sentences(text, limit):
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+    return cut[:end + 1] if end > 60 else cut.rsplit(" ", 1)[0] + "…"
+
+
+def _translate(text, target):
+    from deep_translator import GoogleTranslator
+    src = text
+    if target == "fa":
+        for k, v in PLACES_TR.items():
+            src = src.replace(k, v)
+    out = GoogleTranslator(source="tr", target=target).translate(src) or ""
+    if target == "fa":
+        for k, v in FA_FIX.items():
+            out = out.replace(k, v)
+    return out.strip()
+
+
+def make_free(cfg, now, state):
+    seen = set(state.get("news_seen", []))
+    cands, _ = collect(cfg, now, seen)
+    if not cands:
+        log.info("news (free): nothing new")
+        return None
+    recent = state.get("news_recent_titles", [])[-20:]
+    scored = [(s, i, c) for i, c in enumerate(cands) if (s := _score(c, recent)) is not None]
+    # remember everything looked at, so weak items are not re-checked every hour
+    state.setdefault("news_seen", []).extend(c["key"] for c in cands)
+    if not scored:
+        log.info("news (free): no suitable story this hour")
+        return None
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    c = scored[0][2]
+    title = _sentences(c["title"], 110)
+    body = c["summary"] if len(c["summary"]) > len(c["title"]) + 20 and c["summary"][:40] != c["title"][:40] else ""
+    if not body:
+        body = article_text(c["link"]).split("\n")[0] if c["link"] else ""
+    body = _sentences(body, 240)
+    tr = {"title": title, "body": body}
+    try:
+        en = {"title": _translate(title, "en"), "body": _translate(body, "en") if body else ""}
+        fa = {"title": _translate(title, "fa"), "body": _translate(body, "fa") if body else ""}
+    except Exception as ex:
+        log.warning("news (free): translation failed (%s); skipping this hour", ex)
+        state["news_seen"] = [k for k in state["news_seen"] if k != c["key"]]  # try again next hour
+        return None
+    t = _low(title + " " + body)
+    icon = next((ic for ic, kws in ICON_WORDS.items() if any(k in t for k in kws)), "news")
+    log.info("news (free): picked [%s] %s", c["source"], title)
+    spec = {"name": f"news_{now:%Y%m%d_%H}", "layout": "news3", "date": now.date().isoformat(),
+            "icon": icon, "source": c["source"], "tr": tr, "en": en, "fa": fa}
+    meta = {"link": c["link"], "source": c["source"], "hashtags_fa": ["اخبار_قبرس"]}
+    state.setdefault("news_recent_titles", []).append(title)
+    return spec, meta
+
+
 def make(cfg, now, state):
+    if not (env("ANTHROPIC_API_KEY") or env("GEMINI_API_KEY")):
+        return make_free(cfg, now, state)
+    try:
+        return make_ai(cfg, now, state)
+    except Exception as ex:  # AI down / quota used up -> still post something this hour
+        log.warning("news: AI writer failed (%s); using free mode", ex)
+        return make_free(cfg, now, state)
+
+
+def make_ai(cfg, now, state):
     seen = set(state.get("news_seen", []))
     cands, report = collect(cfg, now, seen)
     if not cands:
