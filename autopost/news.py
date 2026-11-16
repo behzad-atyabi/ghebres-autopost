@@ -107,15 +107,46 @@ def _ask_claude(cfg, system, user, max_tokens):
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent"
 
 
+_GEMINI_MODELS = None
+
+
+def _gemini_models(cfg, key):
+    """Ask Google which models this key can use; prefer the configured ones, then any text 'flash' model."""
+    global _GEMINI_MODELS
+    if _GEMINI_MODELS is not None:
+        return _GEMINI_MODELS
+    wanted = cfg["news"].get("gemini_models") or []
+    avail = []
+    try:
+        r = http().get("https://generativelanguage.googleapis.com/v1beta/models",
+                       params={"pageSize": 200}, headers={"x-goog-api-key": key}, timeout=30)
+        r.raise_for_status()
+        for m in r.json().get("models", []):
+            name = m.get("name", "").split("/")[-1]
+            if "generateContent" not in m.get("supportedGenerationMethods", []):
+                continue
+            if "flash" not in name or any(x in name for x in ("image", "tts", "audio", "live", "embed", "vision")):
+                continue
+            avail.append(name)
+    except Exception as ex:
+        log.warning("gemini: could not list models (%s)", ex)
+    def rank(n):  # configured first, then stable before preview/exp, full before lite, newest name first
+        return (wanted.index(n) if n in wanted else 99, "preview" in n or "exp" in n, "lite" in n)
+    ordered = sorted(sorted(set(avail), reverse=True), key=rank)
+    _GEMINI_MODELS = ordered[:4] or wanted or ["gemini-flash-latest"]
+    log.info("gemini models to try: %s", ", ".join(_GEMINI_MODELS))
+    return _GEMINI_MODELS
+
+
 def _ask_gemini(cfg, system, user, max_tokens):
     key = env("GEMINI_API_KEY", required=True)
-    models = cfg["news"].get("gemini_models") or ["gemini-flash-latest", "gemini-2.5-flash"]
+    models = _gemini_models(cfg, key)
     body = {"systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
             "generationConfig": {"temperature": 0.3, "maxOutputTokens": max(max_tokens, 2048),
                                  "responseMimeType": "application/json"}}
     import time
-    last = None
+    last, tried = None, []
     for m in models:  # first model that answers wins; busy or missing models are skipped
         for attempt in range(3):
             try:
@@ -127,6 +158,8 @@ def _ask_gemini(cfg, system, user, max_tokens):
                 continue
             if r.status_code in (429, 500, 503):  # busy / rate limited -> wait, retry, then next model
                 last = f"{m}: HTTP {r.status_code}"
+                if attempt == 2:
+                    tried.append(last)
                 time.sleep(8 * (attempt + 1))
                 continue
             break
@@ -134,6 +167,7 @@ def _ask_gemini(cfg, system, user, max_tokens):
             continue
         if r.status_code == 404:
             last = f"{m}: not found"
+            tried.append(last)
             continue
         if r.status_code != 200:
             raise RuntimeError(f"gemini {m} HTTP {r.status_code}: {r.text[:300]}")
@@ -144,7 +178,7 @@ def _ask_gemini(cfg, system, user, max_tokens):
             continue
         log.info("news: written by %s", m)
         return text
-    raise RuntimeError(f"gemini: no usable model ({last})")
+    raise RuntimeError(f"gemini: no usable model ({'; '.join(tried + [last or ''])})")
 
 
 def _ask(cfg, system, user, max_tokens=1500):
@@ -186,7 +220,8 @@ BOOST = {
         "inşaat", "konut", "emlak", "ihracat", "bütçe"],
 }
 BLOCK = ["burç", "magazin", "cinayet", "intihar", "taciz", "tecavüz", "istismar", "ceset", "öldürül", "bıçak",
-         "silahlı", "uyuşturucu", "köşe yazısı", "yazarımız", "reklam", "sponsor", "iddaa", "bahis", "maç sonucu"]
+         "silahlı", "uyuşturucu", "öldü", "hayatını kaybetti", "yaşamını yitirdi", "kartel", "nefret",
+         "düşmanlık", "terör", "köşe yazısı", "yazarımız", "reklam", "sponsor", "iddaa", "bahis", "maç sonucu"]
 ICON_WORDS = {"ship": ["liman", "feribot", "gemi", "yat "], "plane": ["havaliman", "ercan", "uçuş", "uçak"],
               "car": ["trafik", "yol ", "yolu", "kaza", "araç", "otobüs", "akaryakıt", "benzin"],
               "health": ["sağlık", "hastane", "eczane", "aşı", "doktor"],
@@ -204,6 +239,16 @@ def _low(s):
     return (s or "").replace("İ", "i").replace("I", "ı").lower()
 
 
+def _body_for(c):
+    """Real story text: the feed summary, else the first paragraphs of the article page."""
+    summ = " ".join((c.get("summary") or "").split())
+    if len(summ) >= len(c["title"]) + 40 and summ[:40] != c["title"][:40]:
+        return summ
+    text = article_text(c.get("link"))
+    paras = [p for p in text.split("\n") if len(p) > 80 and p[:40] != c["title"][:40]]
+    return " ".join(paras[:2])
+
+
 def _score(c, recent):
     t = _low(c["title"] + " " + c["summary"])
     if any(b in t for b in BLOCK):
@@ -214,8 +259,9 @@ def _score(c, recent):
         if words and len(words & rw) / max(len(words), 1) >= 0.6:
             return None
     score = sum(w * sum(1 for k in kws if k in t) for w, kws in BOOST.items())
-    if len(c["summary"]) > len(c["title"]) + 40:  # has real text for the body -> strongly preferred
-        score += 4
+    letters = [ch for ch in c["title"] if ch.isalpha()]
+    if letters and sum(ch.isupper() for ch in letters) / len(letters) > 0.6:  # SHOUTING headline
+        score -= 3
     if "kktc" in t or "kıbrıs" in t or any(_low(p) in t for p in PLACES_TR):
         score += 1
     return score
@@ -274,12 +320,17 @@ def make_free(cfg, now, state):
         log.info("news (free): no suitable story this hour")
         return None
     scored.sort(key=lambda x: (-x[0], x[1]))
-    c = scored[0][2]
+    c, body = None, ""
+    for _, _, cand in scored[:8]:  # best story that actually has text (headline-only items are skipped)
+        body = _body_for(cand)
+        if len(body) >= 80:
+            c = cand
+            break
+    if c is None:
+        log.info("news (free): no story with full text this hour")
+        return None
     title = _sentences(c["title"], 110)
-    body = c["summary"] if len(c["summary"]) > len(c["title"]) + 20 and c["summary"][:40] != c["title"][:40] else ""
-    if not body:
-        body = article_text(c["link"]).split("\n")[0] if c["link"] else ""
-    body = _sentences(body, 240)
+    body = _sentences(body, 380)
     tr = {"title": title, "body": body}
     try:
         en = {"title": _translate(title, "en"), "body": _translate(body, "en") if body else ""}
@@ -311,6 +362,9 @@ def make(cfg, now, state):
 def make_ai(cfg, now, state):
     seen = set(state.get("news_seen", []))
     cands, report = collect(cfg, now, seen)
+    # headline-only items (Google News links, no summary) cannot give a full story text -> leave them out
+    cands = [c for c in cands if "news.google." not in (c.get("link") or "")
+             or len(c.get("summary") or "") >= len(c["title"]) + 40]
     if not cands:
         log.info("news: nothing new")
         return None
