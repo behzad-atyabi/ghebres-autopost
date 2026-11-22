@@ -55,8 +55,18 @@ def collect(cfg, now, seen):
                 key = norm_key(title)
                 if not title or key in seen:
                     continue
+                pic = ""
+                for m in (e.get("media_content") or []) + (e.get("media_thumbnail") or []):
+                    if m.get("url") and (m.get("medium", "image") == "image" or "image" in m.get("type", "image")):
+                        pic = m["url"]
+                        break
+                if not pic:
+                    for l in e.get("links", []):
+                        if l.get("rel") == "enclosure" and l.get("type", "").startswith("image"):
+                            pic = l.get("href", "")
+                            break
                 out.append({"key": key, "title": title, "source": source, "link": e.get("link", ""),
-                            "summary": clean_html(e.get("summary", ""))[:500],
+                            "image": pic, "summary": clean_html(e.get("summary", ""))[:500],
                             "published": dt.datetime.utcfromtimestamp(ts).isoformat() + "Z" if ts else ""})
                 n += 1
             report.append(f"{src['name']}: {n}")
@@ -85,6 +95,47 @@ def article_text(url):
         return "\n".join(paras)[:4000]
     except Exception:
         return ""
+
+
+def _page_image(url):
+    """The article's share picture (og:image / twitter:image)."""
+    if not url or "news.google." in url:
+        return ""
+    try:
+        r = http().get(url, timeout=25)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        for attr, name in (("property", "og:image"), ("name", "twitter:image"), ("property", "og:image:url")):
+            t = soup.find("meta", attrs={attr: name})
+            if t and t.get("content", "").startswith("http"):
+                return t["content"].strip()
+    except Exception:
+        pass
+    return ""
+
+
+def story_image(c, name):
+    """Download the news outlet's own photo for this story; None if there is no usable one."""
+    from .common import ROOT
+    for url in (c.get("image"), _page_image(c.get("link"))):
+        if not url or any(x in url.lower() for x in ("logo", "favicon", "placeholder", "default")):
+            continue
+        try:
+            r = http().get(url, timeout=25)
+            ctype = r.headers.get("Content-Type", "").split(";")[0].strip().lower()
+            if r.status_code != 200 or not ctype.startswith("image/") or len(r.content) < 15000:
+                continue  # missing, not a picture, or a tiny icon
+            ext = {"image/png": "png", "image/webp": "webp"}.get(ctype, "jpg")
+            out = ROOT / "out"
+            out.mkdir(exist_ok=True)
+            path = out / f"{name}_photo.{ext}"
+            path.write_bytes(r.content)
+            log.info("news: story photo %s (%d KB)", url, len(r.content) // 1024)
+            return str(path)
+        except Exception:
+            continue
+    log.info("news: no story photo, using the default picture")
+    return None
 
 
 def _client():
@@ -313,9 +364,12 @@ def make_free(cfg, now, state):
         log.info("news (free): nothing new")
         return None
     recent = state.get("news_recent_titles", [])[-20:]
-    scored = [(s, i, c) for i, c in enumerate(cands) if (s := _score(c, recent)) is not None]
-    # remember everything looked at, so weak items are not re-checked every hour
-    state.setdefault("news_seen", []).extend(c["key"] for c in cands)
+    scored, rejected = [], []
+    for i, c in enumerate(cands):
+        sc = _score(c, recent)
+        (rejected.append(c["key"]) if sc is None else scored.append((sc, i, c)))
+    # unsuitable items are remembered so they are not checked again; good ones stay for later hours
+    state.setdefault("news_seen", []).extend(rejected)
     if not scored:
         log.info("news (free): no suitable story this hour")
         return None
@@ -326,6 +380,7 @@ def make_free(cfg, now, state):
         if len(body) >= 80:
             c = cand
             break
+        state["news_seen"].append(cand["key"])  # no text -> never usable
     if c is None:
         log.info("news (free): no story with full text this hour")
         return None
@@ -341,9 +396,13 @@ def make_free(cfg, now, state):
         return None
     t = _low(title + " " + body)
     icon = next((ic for ic, kws in ICON_WORDS.items() if any(k in t for k in kws)), "news")
+    state["news_seen"].append(c["key"])
     log.info("news (free): picked [%s] %s", c["source"], title)
     spec = {"name": f"news_{now:%Y%m%d_%H}", "layout": "news3", "date": now.date().isoformat(),
             "icon": icon, "source": c["source"], "tr": tr, "en": en, "fa": fa}
+    photo = story_image(c, spec["name"])
+    if photo:
+        spec["image"] = photo
     meta = {"link": c["link"], "source": c["source"], "hashtags_fa": ["اخبار_قبرس"]}
     state.setdefault("news_recent_titles", []).append(title)
     return spec, meta
@@ -391,6 +450,9 @@ def make_ai(cfg, now, state):
     icon = out.get("icon") if out.get("icon") in ICONS else "news"
     spec = {"name": f"news_{now:%Y%m%d_%H}", "layout": "news3", "date": now.date().isoformat(),
             "icon": icon, "source": c["source"], "tr": out["tr"], "en": out["en"], "fa": out["fa"]}
+    photo = story_image(c, spec["name"])
+    if photo:
+        spec["image"] = photo
     meta = {"link": c["link"], "source": c["source"], "hashtags_fa": out.get("hashtags_fa", [])}
     state.setdefault("news_recent_titles", []).append(out["tr"]["title"])
     return spec, meta
