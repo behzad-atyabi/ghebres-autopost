@@ -429,16 +429,8 @@ def make(ctx):
         if fa_:
             cards.append(f'<div class="card ncard fa"><div class="ico">{IR_FLAG}</div><div class="tx"><h2>{e(fa_num(fa_.get("title","")))}</h2><p>{e(fa_num(fa_.get("body","")))}</p></div></div>')
         tab = spec.get("tab", "GÜNÜN HABERİ")
-        mega = ('<svg class="mega" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">'
-                '<path d="M20 50h18l44-26v72L38 70H20z" fill="#fff" stroke="#0E3C9A" stroke-width="5" stroke-linejoin="round"/>'
-                '<path d="M82 24c10 8 15 22 15 36s-5 28-15 36" fill="none" stroke="#E53935" stroke-width="7" stroke-linecap="round"/>'
-                '<rect x="12" y="48" width="14" height="24" rx="5" fill="#E53935"/>'
-                '<path d="M40 72l8 26h12l-6-24" fill="#0E3C9A"/>'
-                '<path d="M104 30l10-8M106 60h12M104 90l10 8" stroke="#E53935" stroke-width="5" stroke-linecap="round"/></svg>')
         inner = (f'<div class="topbar">{brand_html(ctx["logo_uri"])}{datebox(spec)}</div>'
-                 f'<div class="newsbrand">{mega}<div class="nt"><span class="n1">NEWS</span><br>'
-                 f'<span class="n2">TODAY</span><span class="n3">NORTH CYPRUS · قبرس شمالی</span></div></div>'
-                 f'{hero_div(hero_for(spec, "hero-harbor-2.jpg"), 250)}'
+                 f'{hero_div(hero_for(spec, "hero-harbor-2.jpg"), 300)}'
                  f'<div class="tab">{svg(TOPIC["news"])}<span>{e(tab)}</span></div>'
                  f'<div class="cards" data-fit="22" style="font-size:33px;gap:22px">{"".join(cards)}</div>'
                  f'{cta(spec)}')
