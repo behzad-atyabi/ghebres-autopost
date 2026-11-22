@@ -106,7 +106,19 @@ def wait_public(urls, timeout=90):
 # ------------------------------------------------------------------ Telegram
 def tg(method, **kw):
     token = env("TELEGRAM_BOT_TOKEN", required=True)
-    r = requests.post(f"https://api.telegram.org/bot{token}/{method}", timeout=120, **kw)
+    for attempt in range(3):
+        try:
+            r = requests.post(f"https://api.telegram.org/bot{token}/{method}", timeout=120, **kw)
+            break
+        except requests.exceptions.ConnectionError as ex:
+            # could not reach Telegram at all -> nothing was sent, safe to try again
+            # (a slow answer after sending is NOT retried, so a post is never duplicated)
+            if isinstance(ex, requests.exceptions.ReadTimeout) or attempt == 2:
+                raise
+            time.sleep(15 * (attempt + 1))
+            for f in (kw.get("files") or {}).values():
+                if hasattr(f, "seek"):
+                    f.seek(0)
     data = r.json()
     if not data.get("ok"):
         raise RuntimeError(f"telegram {method}: {data.get('description')}")
@@ -152,6 +164,22 @@ def alert(text):
 
 # ------------------------------------------------------------------ Instagram (Graph API, Business/Creator account)
 def ig_story(cfg, image_url):
+    """Post one story; Instagram's temporary errors (timeouts, 'only photo or video') are retried."""
+    for attempt in range(3):
+        try:
+            return _ig_story_once(cfg, image_url)
+        except _IgRetry as ex:
+            if attempt == 2:
+                raise RuntimeError(str(ex))
+            log.warning("instagram: %s - trying again", ex)
+            time.sleep(30 * (attempt + 1))
+
+
+class _IgRetry(Exception):
+    pass
+
+
+def _ig_story_once(cfg, image_url):
     ver = cfg.get("instagram", {}).get("graph_version", "v23.0")
     uid = env("IG_USER_ID", required=True)
     token = env("IG_ACCESS_TOKEN", required=True)
@@ -159,7 +187,7 @@ def ig_story(cfg, image_url):
     r = requests.post(f"{base}/{uid}/media", data={"image_url": image_url, "media_type": "STORIES",
                                                    "access_token": token}, timeout=60).json()
     if "id" not in r:
-        raise RuntimeError(f"instagram container: {r.get('error', r)}")
+        raise _IgRetry(f"instagram container: {r.get('error', r)}")  # nothing posted yet -> safe to retry
     cid = r["id"]
     for _ in range(24):
         s = requests.get(f"{base}/{cid}", params={"fields": "status_code", "access_token": token}, timeout=30).json()
@@ -167,7 +195,7 @@ def ig_story(cfg, image_url):
         if code == "FINISHED":
             break
         if code in ("ERROR", "EXPIRED"):
-            raise RuntimeError(f"instagram processing: {s}")
+            raise _IgRetry(f"instagram processing: {s}")
         time.sleep(5)
     p = requests.post(f"{base}/{uid}/media_publish", data={"creation_id": cid, "access_token": token}, timeout=60).json()
     if "id" not in p:

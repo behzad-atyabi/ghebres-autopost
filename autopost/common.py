@@ -30,8 +30,16 @@ def now_local(cfg):
 
 
 def http():
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
     s = requests.Session()
     s.headers.update({"User-Agent": UA, "Accept-Language": "tr,en;q=0.8"})
+    # slow or briefly unavailable sites (weather API, news feeds, kteb.org) get 3 more tries, 3s/6s/12s apart;
+    # only GET/HEAD are retried, so nothing is ever posted twice
+    retry = Retry(total=3, connect=3, read=3, status=3, backoff_factor=3,
+                  status_forcelist=(500, 502, 503, 504), allowed_methods=("GET", "HEAD"), raise_on_status=False)
+    s.mount("https://", HTTPAdapter(max_retries=retry))
+    s.mount("http://", HTTPAdapter(max_retries=retry))
     return s
 
 

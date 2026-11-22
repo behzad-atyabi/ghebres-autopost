@@ -181,10 +181,11 @@ def _gemini_models(cfg, key):
             avail.append(name)
     except Exception as ex:
         log.warning("gemini: could not list models (%s)", ex)
-    def rank(n):  # configured first, then stable before preview/exp, full before lite, newest name first
-        return (wanted.index(n) if n in wanted else 99, "preview" in n or "exp" in n, "lite" in n)
+    def rank(n):  # configured first, then normal gemini-*-flash(-lite), then preview/exp, other families last
+        family = 0 if re.match(r"gemini-(\d|flash)", n) and "omni" not in n else 1
+        return (wanted.index(n) if n in wanted else 99, family, "preview" in n or "exp" in n)
     ordered = sorted(sorted(set(avail), reverse=True), key=rank)
-    _GEMINI_MODELS = ordered[:4] or wanted or ["gemini-flash-latest"]
+    _GEMINI_MODELS = ordered[:7] or wanted or ["gemini-flash-latest"]
     log.info("gemini models to try: %s", ", ".join(_GEMINI_MODELS))
     return _GEMINI_MODELS
 
@@ -199,7 +200,7 @@ def _ask_gemini(cfg, system, user, max_tokens):
     import time
     last, tried = None, []
     for m in models:  # first model that answers wins; busy or missing models are skipped
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 r = http().post(GEMINI_URL.format(m), json=body, timeout=45,
                                 headers={"x-goog-api-key": key, "Content-Type": "application/json"})
@@ -209,9 +210,9 @@ def _ask_gemini(cfg, system, user, max_tokens):
                 continue
             if r.status_code in (429, 500, 503):  # busy / rate limited -> wait, retry, then next model
                 last = f"{m}: HTTP {r.status_code}"
-                if attempt == 2:
+                if attempt == 1:
                     tried.append(last)
-                time.sleep(8 * (attempt + 1))
+                time.sleep(6)
                 continue
             break
         else:

@@ -4,6 +4,8 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+import requests
+
 from .common import ROOT, http, log
 
 REGIONS = {
@@ -108,7 +110,14 @@ def shorten(addr, limit=70):
 
 def fetch(cfg, now):
     url = cfg["pharmacy"]["url"]
-    r = http().get(url, timeout=40)
+    try:
+        r = http().get(url, timeout=40)
+    except requests.exceptions.SSLError:
+        # kteb.org sometimes lets its certificate expire; the page is public read-only data, so read it anyway
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        log.warning("kteb.org: SSL certificate problem, reading the page without certificate check")
+        r = http().get(url, timeout=40, verify=False)
     r.raise_for_status()
     r.encoding = r.encoding or "utf-8"
     items, page_date = parse(r.text)
