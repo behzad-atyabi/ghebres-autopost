@@ -32,7 +32,7 @@ pharmacy:
 
 news:
   model: claude-sonnet-5-5      # used only if ANTHROPIC_API_KEY is set
-  gemini_models: [gemini-flash-latest, gemini-3-flash, gemini-2.5-flash]   # free tier; first one that exists is used
+  gemini_models: [gemini-flash-lite-latest, gemini-flash-latest]   # free tier; first one that exists is used
   max_age_hours: 6              # only stories published in the last N hours
   skip_if_nothing_new: true     # if no fresh story, skip that hour instead of reposting
   # RSS feeds. Feeds that fail are skipped and reported in the run log.
