@@ -438,7 +438,7 @@ def make(ctx):
         inner = (f'<div class="topbar">{brand_html(ctx["logo_uri"])}{datebox(spec)}</div>'
                  f'<div class="newsbrand">{mega}<div class="nt"><span class="n1">NEWS</span><br>'
                  f'<span class="n2">TODAY</span><span class="n3">NORTH CYPRUS · قبرس شمالی</span></div></div>'
-                 f'{hero_div(hero_for(spec, "hero-harbor-2.jpg"), 330)}'
+                 f'{hero_div(hero_for(spec, "hero-harbor-2.jpg"), 250)}'
                  f'<div class="tab">{svg(TOPIC["news"])}<span>{e(tab)}</span></div>'
                  f'<div class="cards" data-fit="22" style="font-size:33px;gap:22px">{"".join(cards)}</div>'
                  f'{cta(spec)}')
